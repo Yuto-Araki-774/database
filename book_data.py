@@ -2,7 +2,7 @@ import mysql.connector
 from mysql.connector import Error
 import pandas as pd
 
-def create_server_connection(host_name, user_name, user_password):
+def create_server_connection(host_name, user_name, user_password):      #MySQLとコネクションを確立する関数
     connection = None
     try:
         connection = mysql.connector.connect(
@@ -16,7 +16,7 @@ def create_server_connection(host_name, user_name, user_password):
 
     return connection
 
-def create_database(connection, query):
+def create_database(connection, query):                                 #データベースを作成する関数
     cursor = connection.cursor()
     try:
         cursor.execute(query)
@@ -25,7 +25,7 @@ def create_database(connection, query):
         print(f"Error: '{err}'")
 
 
-def main():
+def main():                                                             #main関数 host_name, user_name, user_passwordが順に並んだテキストファイルから読み取る.
     filename = input()
     
     with open(filename, 'r') as f:

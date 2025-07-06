@@ -16,8 +16,9 @@ def create_server_connection(host_name, user_name, user_password):      #MySQL�
 
     return connection
 
-def create_database(connection, query):                                 #データベースを作成する関数
+def create_database(connection, database_name):                                 #データベースを作成する関数 "CREATE DATABASE aaaaa"を行う.
     cursor = connection.cursor()
+    query = "CREATE DATABASE " + database_name
     try:
         cursor.execute(query)
         print("Database created successfully")
@@ -25,7 +26,7 @@ def create_database(connection, query):                                 #デー�
         print(f"Error: '{err}'")
 
 
-def main():                                                             #main関数 host_name, user_name, user_passwordが順に並んだテキストファイルから読み取る.
+def main():                                                                     #main関数 host_name, user_name, user_passwordが順に並んだテキストファイルを読み取る.
     filename = input()
     
     with open(filename, 'r') as f:
@@ -33,7 +34,11 @@ def main():                                                             #main関
         user_name     = f.readline().strip()
         user_password = f.readline().strip()
     
-    conection = create_server_connection(host_name, user_name, user_password)
+    connection = create_server_connection(host_name, user_name, user_password)  #サーバーとのコネクションを確立する.
+    
+    create_database_name = ""                                                   #ここにデータベースの名前を入力する.
+    
+    create_database(connection, create_database_name)
     
 if __name__ == "__main__":
     main()

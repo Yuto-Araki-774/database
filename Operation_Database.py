@@ -2,6 +2,7 @@ import mysql.connector as sqlconn
 from mysql.connector import Error
 import pandas as pd
 import re
+from WHERE_node import Node
 
 class DB_Manager:                                   #データベースの基本操作を行うクラス
     def __init__(self, DB_path):                    #DB_path...[host, user, passwd]
@@ -45,7 +46,7 @@ class DB_Manager:                                   #データベースの基本
         query = f"CREATE TABLE {table_name} ("
         
         for column in columns:
-            query += f"{column} VARCHAR(255), "
+            query += f"{column['Column_Name']} {column['Data_Type']} {column.get('Key', '')} {column.get('Not_Null', '')} {column.get('Default', '')} {column.get('Extra', '')}, "
         
         query += f"PRIMARY KEY ({self.primary_key}))"
         
@@ -98,7 +99,7 @@ class DB_Manager:                                   #データベースの基本
         """
         
         try:
-            self.cursor.execute(query)
+            self.cursor.execute(query, tuple(data))
             self.connection.commit()
             print("Data inserted successfully")
             return True
@@ -106,15 +107,22 @@ class DB_Manager:                                   #データベースの基本
             print(f"Error: '{err}'")
             return False
         
-    def Delete_Data(self, Condition):               #テーブルからデータを削除する関数 ConditionはSQLのWHERE句の条件式
+    def Delete_Data(self, Condition):               #テーブルからデータを削除する関数 ConditionはSQLのWHERE句の条件式を辞書形式で表す.
         if self.table_name == None:
             print("please select table")
             return False
         
-        query = f"DELETE FROM {self.table_name} WHERE {Condition}"
+        query = f"DELETE FROM {self.table_name} WHERE "
+        values = []
+        
+        for key, value in Condition.items():
+            query += f"{key} = %s AND "
+            values.append(value)
+        
+        query = query[:-5]
         
         try:
-            self.cursor.execute(query)
+            self.cursor.execute(query, tuple(values))
             self.connection.commit()
             print("Data deleted successfully")
             return True
@@ -127,10 +135,16 @@ class DB_Manager:                                   #データベースの基本
             print("please select table")
             return False
         
-        query = f"UPDATE {self.table_name} SET {Set} WHERE {Condition}"
+        query = f"UPDATE {self.table_name} SET {Set} WHERE "
+        values = []
+        for key, value in Condition.items():
+            query += f"{key} = %s AND "
+            values.append(value)
+            
+        query = query[:-5]
         
         try:
-            self.cursor.execute(query)
+            self.cursor.execute(query, tuple(values))
             self.connection.commit()
             print("Data updated successfully")
             return True

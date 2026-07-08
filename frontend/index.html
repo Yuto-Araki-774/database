@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>テーブルビューア</title>
+<style>
+  :root {
+    --paper:      #f6f7f9;
+    --surface:    #ffffff;
+    --ink:        #16202e;
+    --ink-soft:   #5b6675;
+    --line:       #dde2e8;
+    --accent:     #2f4bd4;
+    --accent-soft:#eaedfb;
+    --console-bg: #0e1726;
+    --console-ink:#d7e0f0;
+    --console-dim:#6b7a93;
+    --console-key:#8fb4ff;
+    --danger:     #b42318;
+    --danger-bg:  #fdeceb;
+    --radius:     8px;
+    --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 72px;
+  }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  h1 {
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+    font-weight: 680;
+  }
+  .tagline {
+    color: var(--ink-soft);
+    margin: 0 0 32px;
+    max-width: 52ch;
+  }
+
+  /* ---- control bar ---- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .field input, .field select {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fbfcfd;
+    color: var(--ink);
+    min-width: 200px;
+  }
+  .field select { cursor: pointer; }
+  .field select:disabled {
+    color: #a4adba;
+    background: #f1f3f6;
+    cursor: default;
+  }
+  .field input:focus-visible, .field select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+  button.show {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background .15s ease;
+  }
+  button.show:hover { background: #2539b0; }
+  button.show:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button.show:disabled { opacity: .55; cursor: default; }
+
+  .toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    user-select: none;
+    cursor: pointer;
+  }
+  .toggle input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+  /* ---- SQL console (the signature element) ---- */
+  .console {
+    margin-top: 20px;
+    background: var(--console-bg);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+  .console .label {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--console-dim);
+    margin-bottom: 7px;
+  }
+  .console code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--console-ink);
+    white-space: pre;
+    display: block;
+  }
+  .console .prompt { color: var(--console-key); margin-right: 8px; }
+  .console.hidden { display: none; }
+
+  /* ---- results ---- */
+  .result { margin-top: 20px; }
+  .meta {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .meta strong { color: var(--ink); font-weight: 640; }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  thead th {
+    position: sticky; top: 0;
+    background: #f0f2f6;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    font-family: var(--mono);
+    padding: 9px 14px;
+    border-bottom: 1px solid #eef1f4;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: #fafbfc; }
+  td.null { color: #a4adba; font-style: italic; }
+
+  /* ---- states ---- */
+  .state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .state.error {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border: 1px solid #f3c9c5;
+    border-style: solid;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 13.5px;
+  }
+
+  .anim { animation: rise .22s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .anim { animation: none; }
+    button.show { transition: none; }
+  }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 28px 16px 56px; }
+    h1 { font-size: 25px; }
+    .field input { min-width: 0; width: 100%; }
+    .field { flex: 1 1 100%; }
+    .toggle { margin-left: 0; flex: 1 1 100%; }
+    button.show { flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">DB 学習・管理ツール</p>
+    <h1>テーブルビューア</h1>
+    <p class="tagline">テーブルの中身と、その取得に使われたSQLを一緒に表示します。データベースとテーブルを選んで「表示」を押してください。</p>
+
+    <div class="controls">
+      <div class="field">
+        <label for="db">データベース</label>
+        <select id="db">
+          <option value="">読み込み中…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="table">テーブル</label>
+        <select id="table" disabled>
+          <option value="">先にデータベースを選択</option>
+        </select>
+      </div>
+      <button id="showBtn" class="show" type="button" disabled>表示</button>
+      <label class="toggle">
+        <input id="sqlToggle" type="checkbox" checked>
+        SQLを表示
+      </label>
+    </div>
+
+    <div id="console" class="console hidden">
+      <div class="label">実行されたSQL</div>
+      <code><span class="prompt">SQL&gt;</span><span id="sqlText"></span></code>
+    </div>
+
+    <div class="result">
+      <div id="meta" class="meta" hidden></div>
+      <div id="output">
+        <div class="state">テーブルの中身がここに表示されます。</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ★ 仮の認証トークン。ローカル開発専用。Phase 3 でパスキー(WebAuthn)に置き換える。
+  const TOKEN = "user-token-demo";
+
+  const dbSelect    = document.getElementById("db");
+  const tableSelect = document.getElementById("table");
+  const showBtn   = document.getElementById("showBtn");
+  const sqlToggle = document.getElementById("sqlToggle");
+  const consoleEl = document.getElementById("console");
+  const sqlText   = document.getElementById("sqlText");
+  const metaEl    = document.getElementById("meta");
+  const output    = document.getElementById("output");
+
+  async function api(path, method = "GET", body = null) {
+    const opts = { method, headers: { "Authorization": "Bearer " + TOKEN } };
+    if (body !== null) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* 応答が空/非JSONの場合 */ }
+    if (!res.ok) {
+      const detail = data && data.detail ? data.detail : ("エラー (HTTP " + res.status + ")");
+      throw new Error(detail);
+    }
+    return data;
+  }
+
+  function setState(html, isError) {
+    output.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "state" + (isError ? " error" : "");
+    div.textContent = html;
+    output.appendChild(div);
+  }
+
+  function renderSql(sql) {
+    sqlText.textContent = sql || "(なし)";
+    consoleEl.classList.toggle("hidden", !sqlToggle.checked);
+  }
+
+  function renderTable(columns, rows) {
+    output.innerHTML = "";
+
+    metaEl.hidden = false;
+    metaEl.innerHTML = "";
+    const strong = document.createElement("strong");
+    strong.textContent = rows.length + " 行";
+    metaEl.append(strong, document.createTextNode(" ・ " + columns.length + " 列"));
+
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "state";
+      empty.textContent = "このテーブルにはまだ行がありません。";
+      output.appendChild(empty);
+      return;
+    }
+
+    const scroll = document.createElement("div");
+    scroll.className = "table-scroll anim";
+    const table = document.createElement("table");
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    columns.forEach(function (c) {
+      const th = document.createElement("th");
+      th.textContent = c;
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach(function (row) {
+      const tr = document.createElement("tr");
+      columns.forEach(function (c) {
+        const td = document.createElement("td");
+        const v = row[c];
+        if (v === null || v === undefined) {
+          td.textContent = "NULL";
+          td.className = "null";
+        } else {
+          td.textContent = String(v);   // textContent なのでデータによるHTML注入は起きない
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    output.appendChild(scroll);
+  }
+
+  async function showTable() {
+    const db = dbSelect.value;
+    const table = tableSelect.value;
+    if (!db || !table) {
+      setState("データベースとテーブルの両方を選択してください。", false);
+      return;
+    }
+
+    showBtn.disabled = true;             // 処理中は再操作させない(フールプルーフ)
+    showBtn.textContent = "読み込み中…";
+    try {
+      const base = "/databases/" + encodeURIComponent(db) + "/tables/" + encodeURIComponent(table);
+      const colsRes = await api(base + "/columns");
+      const columns = (colsRes.data || []).map(function (c) { return c.COLUMN_NAME; });
+
+      const selRes = await api(base + "/select", "POST", {});
+      renderSql(selRes.sql || "");
+      renderTable(columns, selRes.data || []);
+    } catch (e) {
+      metaEl.hidden = true;
+      renderSql("");
+      setState(e.message, true);
+    } finally {
+      showBtn.disabled = false;
+      showBtn.textContent = "表示";
+    }
+  }
+
+  // ---- ドロップダウンの中身を作る ----
+  function fillOptions(select, items, placeholder) {
+    select.innerHTML = "";
+    const first = document.createElement("option");
+    first.value = "";
+    first.textContent = placeholder;
+    select.appendChild(first);
+    items.forEach(function (name) {
+      const op = document.createElement("option");
+      op.value = name;
+      op.textContent = name;
+      select.appendChild(op);
+    });
+  }
+
+  // ---- 起動時: データベース一覧を読み込む ----
+  async function loadDatabases() {
+    try {
+      const res = await api("/databases");
+      fillOptions(dbSelect, res.data || [], "データベースを選択");
+    } catch (e) {
+      fillOptions(dbSelect, [], "読み込み失敗");
+      setState("データベース一覧を取得できませんでした: " + e.message, true);
+    }
+  }
+
+  // ---- DB を選んだら: そのDBのテーブル一覧を読み込む ----
+  async function loadTables(db) {
+    // DBが変わったのでテーブル選択と表示ボタンはリセット
+    tableSelect.disabled = true;
+    showBtn.disabled = true;
+    if (!db) {
+      fillOptions(tableSelect, [], "先にデータベースを選択");
+      return;
+    }
+    fillOptions(tableSelect, [], "読み込み中…");
+    try {
+      const res = await api("/databases/" + encodeURIComponent(db) + "/tables");
+      fillOptions(tableSelect, res.data || [], "テーブルを選択");
+      tableSelect.disabled = false;
+    } catch (e) {
+      fillOptions(tableSelect, [], "読み込み失敗");
+      setState("テーブル一覧を取得できませんでした: " + e.message, true);
+    }
+  }
+
+  showBtn.addEventListener("click", showTable);
+
+  dbSelect.addEventListener("change", function () {
+    loadTables(dbSelect.value);
+  });
+
+  tableSelect.addEventListener("change", function () {
+    // テーブルが選ばれたら「表示」を押せるようにする(未選択なら押せない)
+    showBtn.disabled = !tableSelect.value;
+  });
+
+  sqlToggle.addEventListener("change", function () {
+    // 既にSQLがある場合のみ、表示/非表示を切り替える
+    if (sqlText.textContent && sqlText.textContent !== "(なし)") {
+      consoleEl.classList.toggle("hidden", !sqlToggle.checked);
+    } else {
+      consoleEl.classList.add("hidden");
+    }
+  });
+
+  loadDatabases();   // 起動時にDB一覧を取得
+</script>
+</body>
+</html>

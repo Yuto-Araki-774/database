@@ -31,7 +31,6 @@ class DB_Manager:                                   # データベースの基�
             if self.connection.is_connected():
                 print("MySQL Database connection successful")
                 self.cursor = self.connection.cursor(dictionary=True)
-                
         except Error as err:
             print(f"Connection error: {err}")
 
@@ -49,47 +48,91 @@ class DB_Manager:                                   # データベースの基�
     @staticmethod
     def _fail(msg):                                 # 実行前の失敗を結果dictと同じ形で返す
         return {"success": False, "data": None, "rowcount": 0, "lastrowid": None,
-                "message": "", "error": msg, "errno": None}
+                "message": "", "error": msg, "errno": None, "sql": None}
+
+    # ---- 表示用SQLの組み立て(★表示専用。実行には絶対に使わない) --------------
+    @staticmethod
+    def _format_sql_value(value):
+        # 1つの値を、表示用のSQLリテラルに整形する。
+        # None→NULL / 真偽→TRUE,FALSE / 数値→そのまま / それ以外→引用符で囲む。
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):                 # bool は int より先に判定する
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return "'" + str(value).replace("'", "''") + "'"   # 文字列: ' を '' にして囲む
+
+    @staticmethod
+    def _fill_placeholders(query, params):
+        # query 内の %s を、params の値(整形済み)で左から順に置き換える。
+        # テンプレートは値にのみ %s を使い、識別子は直接埋め込む前提なので、%s 分割で安全。
+        if not params:
+            return query
+        values = list(params)
+        parts = query.split("%s")
+        out = []
+        i = 0
+        for idx, part in enumerate(parts):
+            out.append(part)
+            if idx < len(parts) - 1:                # パーツの間に値を挿入
+                if i < len(values):
+                    out.append(DB_Manager._format_sql_value(values[i]))
+                    i += 1
+                else:
+                    out.append("%s")               # 値が足りない(想定外)場合はそのまま
+        return "".join(out)
+
+    @staticmethod
+    def _render_display_sql(query, params, many=False):
+        # 実際に実行されるSQLを、値を埋め込んだ「見せる用」の文字列にする。
+        # ★この文字列は実行に使わない。実行は _execute が %s + params で行う。
+        if many:                                    # executemany: 先頭行を代表として見せ、行数を注記
+            rows = list(params or [])
+            if not rows:
+                return query
+            base = DB_Manager._fill_placeholders(query, rows[0])
+            if len(rows) > 1:
+                return f"{base}  -- ほか {len(rows) - 1} 行(計 {len(rows)} 行)"
+            return base
+        return DB_Manager._fill_placeholders(query, params)
 
     def _execute(self, query, params=None, commit=False, fetch=False, many=False):
         # 全SQL実行の単一窓口。DB側の出力を構造化して返す。
         # many=True のとき params は「行のlist」で、executemany により一括実行する。
         result = {"success": False, "data": None, "rowcount": 0, "lastrowid": None,
-                  "message": "", "error": None, "errno": None}    # errno: MySQLエラー番号(成功時None)
- 
+                  "message": "", "error": None, "errno": None,    # errno: MySQLエラー番号(成功時None)
+                  "sql": None}                                    # sql: 表示専用の実行SQL(実行には使わない)
+
+        result["sql"] = self._render_display_sql(query, params, many)  # 成否に関わらず入れる
+
         if self.connection is None or not self.connection.is_connected():
             result["error"] = "not connected"
             return result
- 
+
         try:
             if many:
                 self.cursor.executemany(query, params)      # 複数行を一括実行
             else:
                 self.cursor.execute(query, params)
-            
             if fetch:
                 result["data"] = self.cursor.fetchall()
-            
             result["rowcount"]  = self.cursor.rowcount      # 影響/取得行数
             result["lastrowid"] = self.cursor.lastrowid     # INSERTの採番id(複数行では先頭idで不確実)
             if commit:
                 self.connection.commit()
-                
             result["success"] = True
             return result
-        
         except Error as err:
             if commit:
                 try:
                     self.connection.rollback()              # 書き込み失敗時はロールバックして状態を汚さない
-                    
                 except Error:
                     pass
-            
             result["error"] = str(err)
             result["errno"] = getattr(err, "errno", None)   # 重複等の判定に使う(例: 1007/1050)
             return result
- 
+
     # ---- 句の組み立て(WHERE 〜 LIMIT を共有。サブクエリもここで展開) -------
     def _render_clause(self, clause, subqueries):
         # clause = (template, params)。template には %s(値)と {name}(サブクエリ参照)が混在しうる。
@@ -105,7 +148,6 @@ class DB_Manager:                                   # データベースの基�
                 sub_sql, sub_params, err = self._render_subquery(opt)
                 if err:
                     return None, None, err
-                
                 rendered[name] = (sub_sql, sub_params)
 
         out_sql    = []
@@ -117,22 +159,17 @@ class DB_Manager:                                   # データベースの基�
             if m.group(0) == "%s":                  # 値 → 外側paramsから1つ消費
                 if oi >= len(outer_params):
                     return None, None, "clause: not enough params for placeholders"
-                
                 out_sql.append("%s")
                 out_params.append(outer_params[oi])
                 oi += 1
-                
             else:                                   # {name} → サブクエリを括弧付きで埋め込む
                 name = m.group(1)
                 if name not in rendered:
                     return None, None, f"clause: unknown subquery '{name}'"
-                
                 sub_sql, sub_params = rendered[name]
                 out_sql.append(f"({sub_sql})")
                 out_params.extend(sub_params)       # サブクエリのparamsをその位置に挿入
-                
             pos = m.end()
-            
         out_sql.append(template[pos:])
 
         if oi != len(outer_params):                 # 余った外側params=指定ミス
@@ -146,17 +183,14 @@ class DB_Manager:                                   # データベースの基�
         # 戻り値: (sql, params, error)
         if not opt:
             return None, None, "empty subquery"
-        
         if opt.get("subqueries"):                   # サブクエリの中のサブクエリ → 深さ3
             return None, None, "subquery nesting too deep (max depth 2)"
-        
         if opt.get("joins"):                        # サブクエリ内のJOINは未対応(明示的に弾く)
             return None, None, "joins inside subquery not supported"
 
         select = opt.get("select")
         if not select:                              # IN/比較で使う列(または集約)。生成側が検証
             return None, None, "subquery requires select"
-        
         base = opt.get("from")
         if not self._is_valid_name(base):
             return None, None, "invalid subquery table"
@@ -164,7 +198,6 @@ class DB_Manager:                                   # データベースの基�
         tail, params, err = self._build_tail(opt)   # where/group_by/having/order_by/limit を共有
         if err:
             return None, None, err
-        
         return f"SELECT {select} FROM {base}{tail}", params, None
 
     def _build_tail(self, query_option):
@@ -182,7 +215,6 @@ class DB_Manager:                                   # データベースの基�
             clause, p, err = self._render_clause(where, subqueries)
             if err:
                 return None, None, err
-            
             sql += f" WHERE {clause}"
             params += p
 
@@ -194,7 +226,6 @@ class DB_Manager:                                   # データベースの基�
             clause, p, err = self._render_clause(having, subqueries)
             if err:
                 return None, None, err
-            
             sql += f" HAVING {clause}"
             params += p
 
@@ -205,17 +236,14 @@ class DB_Manager:                                   # データベースの基�
         offset = query_option.get("offset")
         if offset is not None and limit is None:     # OFFSET単独はMySQLで不可
             return None, None, "offset requires limit"
-        
         if limit is not None:
             if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
                 return None, None, "limit must be a non-negative integer"
-            
             sql += " LIMIT %s"                        # 件数は値なのでプレースホルダ
             params.append(limit)
             if offset is not None:
                 if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
                     return None, None, "offset must be a non-negative integer"
-                
                 sql += " OFFSET %s"
                 params.append(offset)
 
@@ -226,23 +254,19 @@ class DB_Manager:                                   # データベースの基�
         res = self._execute("SHOW DATABASES", fetch=True)
         if res["success"]:
             res["data"] = [row["Database"] for row in res["data"]]
-            
         return res
 
     def Create_DataBase(self, DB_name):             # DBを新規作成(切り替えはしない)
         if not self._is_valid_name(DB_name):
             return self._fail("invalid database name")
-        
         res = self._execute(f"CREATE DATABASE {DB_name}")
         if res["success"]:
             res["message"] = f"database '{DB_name}' created"
-            
         return res
 
     def Select_DataBase(self, DB_name):             # 操作対象のDBを選択する(USE)
         if not self._is_valid_name(DB_name):
             return self._fail("invalid database name")
-        
         res = self._execute(f"USE {DB_name}")
         if res["success"]:
             self.DB_name      = DB_name
@@ -251,7 +275,7 @@ class DB_Manager:                                   # データベースの基�
             self.primary_keys = None
             res["message"] = f"database '{DB_name}' selected"
         return res
-    
+
     def Drop_DataBase(self, DB_name):               # DBを削除する(確認はフロント側で行う前提)
         # IF EXISTS は付けない:存在しないDBの削除は errno(1008)で顕在化させる(Create と対称)
         if not self._is_valid_name(DB_name):
@@ -270,17 +294,14 @@ class DB_Manager:                                   # データベースの基�
     def Show_Tables(self):                          # 選択中DB内のテーブル一覧
         if self.DB_name is None:
             return self._fail("please select database")
-        
         res = self._execute("SHOW TABLES", fetch=True)
         if res["success"]:
             res["data"] = [list(row.values())[0] for row in res["data"]]
-            
         return res
 
     def Create_Table(self, table_name, columns, primary_key="id"):  # テーブルを作る
         if not self._is_valid_name(table_name):
             return self._fail("invalid table name")
-        
         if self.DB_name is None:
             return self._fail("please select database")
 
@@ -289,7 +310,6 @@ class DB_Manager:                                   # データベースの基�
             query += (f"{column['Column_Name']} {column['Data_Type']} "
                       f"{column.get('Key', '')} {column.get('Not_Null', '')} "
                       f"{column.get('Default', '')} {column.get('Extra', '')}, ")
-            
         query += f"PRIMARY KEY ({primary_key}))"
 
         res = self._execute(query)
@@ -298,27 +318,8 @@ class DB_Manager:                                   # データベースの基�
             self.columns      = [c["Column_Name"] for c in columns]
             self.primary_keys = [p.strip() for p in primary_key.split(",")]
             res["message"]    = f"table '{table_name}' created"
-            
         return res
 
-    def Select_Table(self, table_name):             # テーブルを選択し、全行を返す
-        if not self._is_valid_name(table_name):
-            return self._fail("invalid table name")
-        
-        if self.DB_name is None:
-            return self._fail("please select database")
-
-        res = self._execute(f"SELECT * FROM {table_name}", fetch=True)
-        if not res["success"]:
-            return res
-
-        self.table_name = table_name
-        info = self.Get_Columns_Info()              # 列名(空テーブルでも確実に取れる)
-        self.columns = [c["COLUMN_NAME"] for c in info["data"]] if info["success"] else None
-        pk = self.Get_Primary_Key()                 # 主キー
-        self.primary_keys = pk["data"] if pk["success"] else None
-        return res
-    
     def Drop_Table(self, table_name):               # テーブルを削除する(確認はフロント側で行う前提)
         # IF EXISTS は付けない:存在しないテーブルの削除は errno(1051)で顕在化させる
         if not self._is_valid_name(table_name):
@@ -333,7 +334,7 @@ class DB_Manager:                                   # データベースの基�
                 self.primary_keys = None
             res["message"] = f"table '{table_name}' dropped"
         return res
-    
+
     def Truncate_Table(self, table_name):           # 全行削除(構造は残す。確認はフロント側で行う前提)
         # TRUNCATE は暗黙コミットされ、ロールバックできない。だから確認はフロントで必ず通すこと。
         # Delete_Data は条件必須で全削除を禁じているので、意図的な全消去はこちらが正規の入口。
@@ -347,32 +348,41 @@ class DB_Manager:                                   # データベースの基�
             res["message"] = f"table '{table_name}' truncated"
         return res
 
+    def Select_Table(self, table_name):             # テーブルを選択し、全行を返す
+        if not self._is_valid_name(table_name):
+            return self._fail("invalid table name")
+        if self.DB_name is None:
+            return self._fail("please select database")
+
+        res = self._execute(f"SELECT * FROM {table_name}", fetch=True)
+        if not res["success"]:
+            return res
+
+        self.table_name = table_name
+        info = self.Get_Columns_Info()              # 列名(空テーブルでも確実に取れる)
+        self.columns = [c["COLUMN_NAME"] for c in info["data"]] if info["success"] else None
+        pk = self.Get_Primary_Key()                 # 主キー
+        self.primary_keys = pk["data"] if pk["success"] else None
+        return res
 
     def Get_Primary_Key(self):                      # 選択中テーブルの主キー列
         if self.table_name is None:
             return self._fail("table not selected")
-        
         res = self._execute(
             f"SHOW KEYS FROM {self.table_name} WHERE Key_name = 'PRIMARY'", fetch=True)
-        
         if res["success"]:
             res["data"] = [row["Column_name"] for row in res["data"]]
-            
         return res
 
     def Get_Columns_Info(self, table_name=None):    # 列メタデータ(型/NULL可否/キー等)。解釈はしない
         # table_name 省略時は選択中テーブル。JOIN/サブクエリ相手の列集合を引くため明示テーブルも受ける。
         name = table_name if table_name is not None else self.table_name
-        
         if self.DB_name is None:
             return self._fail("please select database")
-        
         if name is None:
             return self._fail("table not selected")
-        
         if not self._is_valid_name(name):
             return self._fail("invalid table name")
-        
         query = """
             SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH,
                    NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE,
@@ -426,7 +436,6 @@ class DB_Manager:                                   # データベースの基�
     def Select_Join(self, Columns, query_option):   # 複数テーブルを結合して取得(読み取り専用)
         if query_option is None:
             return self._fail("query_option required")
-        
         if not Columns:                             # JOINでは修飾付きの列指定が必須("*"は避ける)
             return self._fail("columns required for join")
 
@@ -440,15 +449,12 @@ class DB_Manager:                                   # データベースの基�
             jtype = (j.get("type") or "").upper()
             if jtype not in self._ALLOWED_JOINS:    # 種類はホワイトリストで縛る
                 return self._fail(f"join type not allowed: {j.get('type')}")
-            
             jtable = j.get("table")
             if not self._is_valid_name(jtable):     # 結合相手のテーブル名も検証
                 return self._fail("invalid join table")
-            
             on = j.get("on")
             if not on:                              # ON無しの結合(意図しない直積)を防ぐ
                 return self._fail("join requires on condition")
-            
             query += f" {jtype} JOIN {jtable} ON {on}"   # on の列名は生成側が検証済み
 
         tail, params, err = self._build_tail(query_option)   # WHERE〜LIMIT(サブクエリ含む)は共通
@@ -461,7 +467,6 @@ class DB_Manager:                                   # データベースの基�
     def Insert_Data(self, data):                    # 1行挿入(操作完了時に実行+コミット)
         if self.table_name is None or self.columns is None:
             return self._fail("table not selected")
-        
         if len(data) != len(self.columns):
             return self._fail("data length does not match column length")
 
@@ -471,42 +476,35 @@ class DB_Manager:                                   # データベースの基�
         if res["success"]:
             res["data"]    = [dict(zip(self.columns, data))]   # 変更点=挿入した行
             res["message"] = "inserted"                        # 採番idは res["lastrowid"]
-            
         return res
-    
+
     def Insert_Many(self, data_rows):               # 複数行を一括挿入(executemany)
         # data_rows は「行のlist」: [[None, "Alice"], [None, "Bob"], ...]
         # 全行が1トランザクション。1行でも失敗すれば全行ロールバックされる。
         if self.table_name is None or self.columns is None:
             return self._fail("table not selected")
-        
         if not isinstance(data_rows, (list, tuple)) or len(data_rows) == 0:
             return self._fail("data_rows must be a non-empty list of rows")
- 
+
         n = len(self.columns)
         for i, row in enumerate(data_rows):         # 全行を事前検証(1行でも崩れると全体が失敗するため)
             if not isinstance(row, (list, tuple)):
                 return self._fail(f"row {i}: each row must be a list/tuple")
-            
             if len(row) != n:
                 return self._fail(f"row {i}: data length does not match column length ({len(row)} != {n})")
- 
+
         query = (f"INSERT INTO {self.table_name} ({', '.join(self.columns)}) "
                  f"VALUES ({', '.join(['%s'] * n)})")
-        
         params = [tuple(row) for row in data_rows]  # executemany 用の行のlist
         res = self._execute(query, params, commit=True, many=True)
         if res["success"]:
             res["data"]    = [dict(zip(self.columns, row)) for row in data_rows]  # 挿入した行
             res["message"] = f"{len(data_rows)} rows inserted"
-        
         return res
-
 
     def Delete_Data(self, query_option):            # 条件付き削除(操作完了時に実行+コミット)
         if self.table_name is None:
             return self._fail("table not selected")
-        
         where = query_option.get("where") if query_option else None
         if not where or not where[0]:               # WHERE無しの全削除を防ぐガード
             return self._fail("please specify condition")
@@ -522,14 +520,12 @@ class DB_Manager:                                   # データベースの基�
         if res["success"]:
             res["data"]    = sel["data"]               # 削除した行
             res["message"] = "deleted"
-            
         return res
 
     def Update_Data(self, set_option, query_option):  # 条件付き更新(操作完了時に実行+コミット)
         # set_option = ("name = %s, age = %s", ["Tanaka", 30])   SET の (構造, 値)
         if self.table_name is None:
             return self._fail("table not selected")
-        
         where = query_option.get("where") if query_option else None
         if not where or not where[0]:               # 全行更新を防ぐガード
             return self._fail("please specify condition")

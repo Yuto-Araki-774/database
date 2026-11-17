@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from Operation_Database import DB_Manager
-from WHERE_node import build_query_option
+from WHERE_node import build_query_option, build_update
 
 app = FastAPI(title="DB Learning App API", version="0.1 (Phase 1)")
 
@@ -96,7 +96,7 @@ def _respond(result: dict):
 
 
 def _use_table(db: DB_Manager, db_name: str, table: str) -> List[str]:
-    # DB を選択し、テーブルの列名一覧を得て、操作の前提(table_name / columns)を整える。
+    # DB を選択し、テーブルの列名一覧を得て、操作の前提(table_name / columns / primary_keys)を整える。
     # 全行を取得せず列だけ得るため Get_Columns_Info を使う。
     sel = db.Select_DataBase(db_name)
     if not sel["success"]:
@@ -109,6 +109,9 @@ def _use_table(db: DB_Manager, db_name: str, table: str) -> List[str]:
         raise HTTPException(status_code=404, detail=f"table not found: {table}")
     db.table_name = table                    # 検証済みの名前。Select_Data / Insert_* が使う
     db.columns = cols
+    # 主キー列(Update_Data の更新後の取り直しと、build_update の主キー保護に使う)。
+    # 列情報に含まれる COLUMN_KEY から取るので、追加のクエリは要らない。
+    db.primary_keys = [c["COLUMN_NAME"] for c in info["data"] if c.get("COLUMN_KEY") == "PRI"]
     return cols
 
 
@@ -118,8 +121,18 @@ class SelectRequest(BaseModel):
     query: Optional[dict] = None             # where/order_by/group_by/limit などの構造化条件
 
 
+MAX_INSERT_ROWS = 1000                       # 1回の挿入で受け付ける最大行数
+
+
 class InsertRequest(BaseModel):
     rows: List[List[Any]]                    # 行のリスト(各行は列順の値)
+
+
+class UpdateRequest(BaseModel):
+    # 例: {"set": {"is_released": 1}, "key": {"series_id": 3, "volume_number": 5}}
+    set: dict                                # {列名: 新しい値}。主キー列は不可(WHERE_node が弾く)
+    key: Optional[dict] = None               # 主キーで1行を特定する
+    where: Optional[dict] = None             # または条件ノードで複数行(key とどちらか一方)
 
 
 # ========================= 読み取り(認証済みなら誰でも) =========================
@@ -177,12 +190,46 @@ def select_data(db_name: str, table: str, body: SelectRequest,
 def insert_rows(db_name: str, table: str, body: InsertRequest,
                 user: dict = Depends(get_current_user),
                 db: DB_Manager = Depends(get_db)):
-    _use_table(db, db_name, table)
+    cols = _use_table(db, db_name, table)
     if not body.rows:
         raise HTTPException(status_code=400, detail="rows must not be empty")
+    # 一括挿入の上限。全行が1トランザクションなので、大きすぎる要求はここで止める。
+    if len(body.rows) > MAX_INSERT_ROWS:
+        raise HTTPException(status_code=400,
+                            detail=f"too many rows: {len(body.rows)} (max {MAX_INSERT_ROWS})")
+    # 列数の不一致は、DB に投げる前に「何行目か」を付けて返す(GUI で直しやすくするため)
+    for i, row in enumerate(body.rows, start=1):
+        if len(row) != len(cols):
+            raise HTTPException(status_code=400,
+                                detail=f"row {i}: expected {len(cols)} values, got {len(row)}")
     if len(body.rows) == 1:
         return _respond(db.Insert_Data(body.rows[0]))    # 1行(採番idは lastrowid に入る)
     return _respond(db.Insert_Many(body.rows))           # 複数行(全行1トランザクション)
+
+
+@app.patch("/databases/{db_name}/tables/{table}/rows")
+def update_rows(db_name: str, table: str, body: UpdateRequest,
+                user: dict = Depends(get_current_user),
+                db: DB_Manager = Depends(get_db)):
+    # 権限は insert と同じく「認証済みなら誰でも」。8.2 の役割(閲覧者/編集者/管理者)を
+    # 入れる段階で、insert と一緒に「編集者以上」に絞る。
+    cols = _use_table(db, db_name, table)
+
+    # SET / WHERE を WHERE_node で検証して組み立てる(ここが防壁)。
+    # 列名の照合・主キー列の書き換え禁止・条件必須(key か where)はすべてここで判定する。
+    built = build_update({"set": body.set, "key": body.key, "where": body.where},
+                         cols, db.primary_keys)
+    if not built["success"]:
+        raise HTTPException(status_code=400, detail=built["error"])
+
+    res = db.Update_Data(built["set_option"], built["query_option"])
+
+    # 主キー指定なのに対象が無い = 画面を開いた後に誰かが削除した(一往復モデルでは起こりうる)。
+    # このとき UPDATE は 0 行に対して実行されるだけなので、DB は変わっていない。
+    if res["success"] and body.key is not None and not res["data"]["before"]:
+        raise HTTPException(status_code=404,
+                            detail="row not found (it may have been deleted by someone else)")
+    return _respond(res)
 
 
 # ========================= 破壊的操作(admin のみ) =========================

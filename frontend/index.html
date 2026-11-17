@@ -36,9 +36,9 @@
   }
 
   .wrap {
-    max-width: 960px;
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 40px 24px 72px;
+    padding: 40px 48px 72px;   /* 左右の余白は常に48px */
   }
 
   /* ---- header ---- */
@@ -194,6 +194,37 @@
   tbody tr:nth-child(even) td { background: #fafbfc; }
   td.null { color: #a4adba; font-style: italic; }
 
+  /* ---- セル編集 ---- */
+  td.editable { cursor: text; }
+  td.editable:hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px #c3cbf3; }
+  td.editable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  td.editing { padding: 0; }
+  td.editing input {
+    display: block;
+    width: 100%;
+    border: none;
+    padding: 9px 14px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--accent-soft);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  td.editing input::placeholder { color: #a4adba; font-style: italic; }
+  td.saving { color: var(--ink-soft); }
+  td.saved { animation: saved 1.4s ease; }
+  @keyframes saved { from { background: #cdf3db; } to { background: transparent; } }
+
+  .edit-msg {
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+  .edit-msg.ok    { color: #166534; background: #ecfdf3; border: 1px solid #b7e4c7; }
+  .edit-msg.error { color: var(--danger); background: var(--danger-bg); border: 1px solid #f3c9c5; font-family: var(--mono); }
+
   /* ---- states ---- */
   .state {
     padding: 40px 20px;
@@ -213,10 +244,110 @@
     font-size: 13.5px;
   }
 
+  /* ---- 一括挿入(表形式の入力) ---- */
+  .bulk {
+    margin-top: 36px;
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .bulk h2 { font-size: 18px; margin: 0 0 4px; font-weight: 650; }
+  .bulk .hint { font-size: 13px; color: var(--ink-soft); margin: 0 0 14px; }
+
+  .grid-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  table.grid { font-size: 13.5px; }
+  table.grid thead th { padding: 8px 10px; vertical-align: bottom; }
+  table.grid thead th .type {
+    display: block;
+    font-weight: 400;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  table.grid td { padding: 0; border-bottom: 1px solid #eef1f4; border-right: 1px solid #eef1f4; }
+  table.grid tbody tr:nth-child(even) td { background: transparent; }
+  table.grid td.rownum {
+    width: 1%;
+    padding: 0 8px;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: #f7f8fa;
+    user-select: none;
+  }
+  table.grid td input {
+    display: block;
+    width: 100%;
+    min-width: 120px;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink);
+  }
+  table.grid td input::placeholder { color: #b6bec9; }
+  table.grid td input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--accent-soft);
+  }
+  table.grid td.del { width: 1%; border-right: none; }
+  button.del-row {
+    border: none;
+    background: none;
+    color: var(--ink-soft);
+    font-size: 16px;
+    line-height: 1;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  button.del-row:hover { color: var(--danger); background: var(--danger-bg); }
+  button.del-row:focus-visible { outline: 2px solid var(--ink); }
+
+  .bulk-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .bulk-row .toggle { margin-left: 0; }
+  button.secondary {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid #cdd4f6;
+    border-radius: 6px;
+    padding: 9px 18px;
+    cursor: pointer;
+  }
+  button.secondary:hover { background: #dde2f8; }
+  button.secondary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button.secondary:disabled { opacity: .55; cursor: default; }
+  .bulk-actions { margin-left: auto; display: flex; gap: 10px; }
+  #bulkResult { margin-top: 14px; }
+  #bulkResult:empty { display: none; }
+  .state.ok {
+    color: #166534;
+    background: #ecfdf3;
+    border: 1px solid #b7e4c7;
+    text-align: left;
+  }
+
   .anim { animation: rise .22s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) {
     .anim { animation: none; }
+    td.saved { animation: none; }
     button.show { transition: none; }
   }
 
@@ -227,12 +358,14 @@
     .field { flex: 1 1 100%; }
     .toggle { margin-left: 0; flex: 1 1 100%; }
     button.show { flex: 1 1 100%; }
+    .bulk-actions { margin-left: 0; flex: 1 1 100%; }
+    .bulk-actions button { flex: 1; }
   }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <p class="eyebrow">DB 学習・管理ツール</p>
+    <p class="eyebrow">DBビューワー</p>
     <h1>テーブルビューア</h1>
     <p class="tagline">テーブルの中身と、その取得に使われたSQLを一緒に表示します。データベースとテーブルを選んで「表示」を押してください。</p>
 
@@ -263,10 +396,29 @@
 
     <div class="result">
       <div id="meta" class="meta" hidden></div>
+      <div id="editMsg" class="edit-msg" role="status" hidden></div>
       <div id="output">
         <div class="state">テーブルの中身がここに表示されます。</div>
       </div>
     </div>
+
+    <section class="bulk" aria-labelledby="bulkTitle">
+      <h2 id="bulkTitle">行の追加</h2>
+      <p class="hint" id="bulkHint">上でテーブルを選ぶと、ここに入力欄が出ます。</p>
+      <div id="bulkGrid"></div>
+      <div class="bulk-row" id="bulkControls" hidden>
+        <button id="addRowBtn" class="secondary" type="button">行を追加</button>
+        <label class="toggle">
+          <input id="bulkEmptyNull" type="checkbox" checked>
+          空欄を NULL にする
+        </label>
+        <div class="bulk-actions">
+          <button id="clearBtn" class="secondary" type="button">クリア</button>
+          <button id="bulkInsertBtn" class="show" type="button">挿入</button>
+        </div>
+      </div>
+      <div id="bulkResult"></div>
+    </section>
   </div>
 
 <script>
@@ -311,14 +463,44 @@
     consoleEl.classList.toggle("hidden", !sqlToggle.checked);
   }
 
+  // ---- 表示中のテーブルの状態(セル編集で使う) ----
+  // db/table は「表示」を押した時点のもの。後でドロップダウンを変えても、編集先がずれないようにする。
+  const view = { db: "", table: "", columns: [], meta: {}, pks: [], rows: [] };
+  const editMsg = document.getElementById("editMsg");
+
+  function editMessage(text, kind) {
+    editMsg.hidden = !text;
+    editMsg.textContent = text || "";
+    editMsg.className = "edit-msg" + (kind ? " " + kind : "");
+  }
+
+  // セルに値を表示する(NULL は薄く表示)
+  function fillCell(td, v) {
+    td.classList.remove("editing", "saving");
+    if (v === null || v === undefined) {
+      td.textContent = "NULL";
+      td.classList.add("null");
+    } else {
+      td.textContent = String(v);   // textContent なのでデータによるHTML注入は起きない
+      td.classList.remove("null");
+    }
+  }
+
   function renderTable(columns, rows) {
     output.innerHTML = "";
+    const editable = view.pks.length > 0;
 
     metaEl.hidden = false;
     metaEl.innerHTML = "";
     const strong = document.createElement("strong");
     strong.textContent = rows.length + " 行";
     metaEl.append(strong, document.createTextNode(" ・ " + columns.length + " 列"));
+    if (rows.length > 0) {
+      metaEl.append(document.createTextNode(editable
+        ? " ・ セルをクリックすると値を編集できます(Enter で確定、Esc で取消)。主キー(" +
+          view.pks.join(", ") + ")は編集できません"
+        : " ・ 主キーがないため編集できません"));
+    }
 
     if (rows.length === 0) {
       const empty = document.createElement("div");
@@ -343,17 +525,17 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    rows.forEach(function (row) {
+    rows.forEach(function (row, i) {
       const tr = document.createElement("tr");
       columns.forEach(function (c) {
         const td = document.createElement("td");
-        const v = row[c];
-        if (v === null || v === undefined) {
-          td.textContent = "NULL";
-          td.className = "null";
-        } else {
-          td.textContent = String(v);   // textContent なのでデータによるHTML注入は起きない
+        td.dataset.row = i;               // view.rows の何行目か
+        td.dataset.col = c;               // 列名
+        if (editable && !view.pks.includes(c)) {  // 主キーの列は編集させない
+          td.classList.add("editable");
+          td.tabIndex = 0;                // Tab で移動し、Enter で編集できるように
         }
+        fillCell(td, row[c]);
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -373,14 +555,28 @@
 
     showBtn.disabled = true;             // 処理中は再操作させない(フールプルーフ)
     showBtn.textContent = "読み込み中…";
+    editMessage("", "");
     try {
       const base = "/databases/" + encodeURIComponent(db) + "/tables/" + encodeURIComponent(table);
       const colsRes = await api(base + "/columns");
-      const columns = (colsRes.data || []).map(function (c) { return c.COLUMN_NAME; });
+      const colsData = colsRes.data || [];
+      const columns = colsData.map(function (c) { return c.COLUMN_NAME; });
 
       const selRes = await api(base + "/select", "POST", {});
+
+      view.db      = db;
+      view.table   = table;
+      view.columns = columns;
+      view.rows    = selRes.data || [];
+      view.pks     = colsData.filter(function (c) { return c.COLUMN_KEY === "PRI"; })
+                             .map(function (c) { return c.COLUMN_NAME; });
+      view.meta    = {};
+      colsData.forEach(function (c) {
+        view.meta[c.COLUMN_NAME] = { nullable: c.IS_NULLABLE === "YES" };
+      });
+
       renderSql(selRes.sql || "");
-      renderTable(columns, selRes.data || []);
+      renderTable(columns, view.rows);
     } catch (e) {
       metaEl.hidden = true;
       renderSql("");
@@ -437,15 +633,343 @@
     }
   }
 
+  // ======================= セルの編集(UPDATE) =======================
+  // 主キーで1行を特定し、クリックしたセルの1列だけを更新する。
+
+  function startEdit(td) {
+    if (td.classList.contains("editing") || td.classList.contains("saving")) return;
+    const i    = Number(td.dataset.row);
+    const col  = td.dataset.col;
+    const orig = view.rows[i][col];
+    const width = td.offsetWidth;
+
+    td.classList.add("editing");
+    td.classList.remove("null");
+    td.textContent = "";
+    const input = document.createElement("input");
+    input.type  = "text";
+    input.value = (orig === null || orig === undefined) ? "" : String(orig);
+    if (orig === null || orig === undefined) input.placeholder = "NULL";
+    input.style.minWidth = width + "px";        // 編集中に列幅が縮まないように
+    input.setAttribute("aria-label", col + " を編集");
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    let done = false;                           // Enter の後の blur で二重に確定しないため
+    function finish(save) {
+      if (done) return;
+      done = true;
+      if (save) commitEdit(td, i, col, input.value);
+      else      fillCell(td, view.rows[i][col]);
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.isComposing) return;                // 日本語変換中の Enter は確定扱いにしない
+      if (e.key === "Enter")  { e.preventDefault(); finish(true);  td.focus(); }
+      if (e.key === "Escape") { e.preventDefault(); finish(false); td.focus(); }
+    });
+    input.addEventListener("blur", function () { finish(true); });   // 他をクリックしたら確定
+  }
+
+  async function commitEdit(td, i, col, raw) {
+    const orig = view.rows[i][col];
+    const meta = view.meta[col] || {};
+    // 空欄は、NULL を許す列なら NULL、許さない列なら空文字として送る
+    const value = (raw === "" && meta.nullable) ? null : raw;
+
+    const origIsNull = orig === null || orig === undefined;
+    const unchanged = (value === null) ? origIsNull : (!origIsNull && String(orig) === value);
+    if (unchanged) { fillCell(td, orig); return; }    // 変わっていなければ送らない
+
+    const key = {};                              // 更新前の主キーの値で行を特定する
+    view.pks.forEach(function (k) { key[k] = view.rows[i][k]; });
+
+    fillCell(td, value);
+    td.classList.add("saving");
+    try {
+      const base = "/databases/" + encodeURIComponent(view.db) + "/tables/" + encodeURIComponent(view.table);
+      const setObj = {};
+      setObj[col] = value;
+      const res = await api(base + "/rows", "PATCH", { key: key, set: setObj });
+
+      // サーバーが返した更新後の行で置き換える(型の変換や ON UPDATE で他の列が変わる場合も反映)
+      const after = res.data && res.data.after && res.data.after[0];
+      if (after) view.rows[i] = after; else view.rows[i][col] = value;
+      Array.from(td.parentElement.cells).forEach(function (cell) {
+        if (!cell.classList.contains("editing")) fillCell(cell, view.rows[i][cell.dataset.col]);
+      });
+
+      td.classList.remove("saved");
+      void td.offsetWidth;                       // アニメーションを再スタートさせる
+      td.classList.add("saved");
+      if (res.sql) renderSql(res.sql);
+      editMessage(view.table + "." + col + " を更新しました。", "ok");
+    } catch (e) {
+      fillCell(td, orig);                        // 失敗したら元の値に戻す(DBは変わっていない)
+      editMessage("更新できませんでした: " + e.message, "error");
+    }
+  }
+
+  output.addEventListener("click", function (e) {
+    const td = e.target.closest("td.editable");
+    if (td) startEdit(td);
+  });
+  output.addEventListener("keydown", function (e) {
+    const td = e.target;
+    if (td.tagName !== "TD" || !td.classList.contains("editable")) return;
+    if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); startEdit(td); }
+  });
+
+  // ======================= 行の追加(表形式の入力) =======================
+  const MAX_INSERT_ROWS = 1000;          // サーバーの MAX_INSERT_ROWS と揃える
+  const INITIAL_ROWS    = 5;             // 最初に用意する空行の数
+
+  const bulkHint      = document.getElementById("bulkHint");
+  const bulkGrid      = document.getElementById("bulkGrid");
+  const bulkControls  = document.getElementById("bulkControls");
+  const addRowBtn     = document.getElementById("addRowBtn");
+  const clearBtn      = document.getElementById("clearBtn");
+  const bulkEmptyNull = document.getElementById("bulkEmptyNull");
+  const bulkInsertBtn = document.getElementById("bulkInsertBtn");
+  const bulkResult    = document.getElementById("bulkResult");
+
+  let bulkColumns = [];     // 列メタデータ [{name, type, auto, nullable}]
+  let gridBody    = null;   // 入力表の <tbody>
+
+  function bulkMessage(text, kind) {
+    bulkResult.innerHTML = "";
+    if (!text) return;
+    const div = document.createElement("div");
+    div.className = "state" + (kind ? " " + kind : "");
+    div.textContent = text;
+    bulkResult.appendChild(div);
+  }
+
+  function renumberRows() {
+    Array.from(gridBody.rows).forEach(function (tr, i) { tr.cells[0].textContent = i + 1; });
+  }
+
+  // 空行を1行追加し、その <tr> を返す
+  function addRow() {
+    if (gridBody.rows.length >= MAX_INSERT_ROWS) {
+      bulkMessage("1回に追加できるのは " + MAX_INSERT_ROWS + " 行までです。", "error");
+      return null;
+    }
+    const tr = document.createElement("tr");
+    const num = document.createElement("td");
+    num.className = "rownum";
+    tr.appendChild(num);
+
+    bulkColumns.forEach(function (col, k) {
+      if (col.auto) return;                       // 自動採番の列は入力させない(表示しない)
+      const td = document.createElement("td");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.dataset.col = k;                      // テーブル上の何列目か
+      input.setAttribute("aria-label", col.name);
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+
+    const delTd = document.createElement("td");
+    delTd.className = "del";
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "del-row";
+    del.textContent = "×";
+    del.setAttribute("aria-label", "この行を削除");
+    del.addEventListener("click", function () {
+      tr.remove();
+      if (gridBody.rows.length === 0) addRow();   // 最低1行は残す
+      renumberRows();
+    });
+    delTd.appendChild(del);
+    tr.appendChild(delTd);
+
+    gridBody.appendChild(tr);
+    renumberRows();
+    return tr;
+  }
+
+  // 列見出しと空行で入力表を作り直す
+  function buildGrid() {
+    bulkGrid.innerHTML = "";
+    const scroll = document.createElement("div");
+    scroll.className = "grid-scroll";
+    const t = document.createElement("table");
+    t.className = "grid";
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    htr.appendChild(document.createElement("th"));     // 行番号の列
+    bulkColumns.forEach(function (col) {
+      if (col.auto) return;                       // 自動採番の列は見出しも出さない
+      const th = document.createElement("th");
+      th.appendChild(document.createTextNode(col.name));
+      if (col.type) {
+        const sp = document.createElement("span");
+        sp.className = "type";
+        sp.textContent = col.type + (col.nullable === false ? "・必須" : "");
+        th.appendChild(sp);
+      }
+      htr.appendChild(th);
+    });
+    htr.appendChild(document.createElement("th"));     // 削除ボタンの列
+    thead.appendChild(htr);
+    t.appendChild(thead);
+
+    gridBody = document.createElement("tbody");
+    t.appendChild(gridBody);
+    scroll.appendChild(t);
+    bulkGrid.appendChild(scroll);
+
+    for (let i = 0; i < INITIAL_ROWS; i++) addRow();
+  }
+
+  // 入力表 → 送信用の行。すべて空欄の行は無視する。
+  function collectRows() {
+    const rows = [];
+    Array.from(gridBody.rows).forEach(function (tr) {
+      const inputs = Array.from(tr.querySelectorAll("input"));
+      if (inputs.every(function (inp) { return inp.value.trim() === ""; })) return;
+      // サーバーはテーブルの全列ぶんの値を列順で受け取る。表示していない自動採番の列は NULL を送る。
+      const row = bulkColumns.map(function () { return null; });
+      inputs.forEach(function (inp) {
+        const v = inp.value;
+        row[Number(inp.dataset.col)] = (v === "" && bulkEmptyNull.checked) ? null : v;
+      });
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  async function insertBulk() {
+    const rows = collectRows();
+    if (rows.length === 0) {
+      bulkMessage("入力された行がありません。", "error");
+      return;
+    }
+    const db = dbSelect.value, table = tableSelect.value;
+    if (!confirm(db + "." + table + " に " + rows.length + " 行を挿入します。よろしいですか？")) return;
+
+    bulkInsertBtn.disabled = true;
+    bulkInsertBtn.textContent = "挿入中…";
+    try {
+      const base = "/databases/" + encodeURIComponent(db) + "/tables/" + encodeURIComponent(table);
+      const res = await api(base + "/rows", "POST", { rows: rows });
+      buildGrid();                   // 成功したら入力欄を空に戻す
+      await showTable();             // 挿入結果を上の表に反映(SQL表示もここで更新)
+      if (res.sql) renderSql(res.sql);
+      bulkMessage(res.rowcount + " 行を挿入しました。", "ok");
+    } catch (e) {
+      // 全行が1トランザクションなので、失敗時は1行も入っていない。入力はそのまま残す。
+      bulkMessage("挿入できませんでした(1行も挿入されていません): " + e.message, "error");
+    } finally {
+      bulkInsertBtn.disabled = false;
+      bulkInsertBtn.textContent = "挿入";
+    }
+  }
+
+  // Excel などからコピーした複数セル(タブ・改行区切り)を、貼り付け位置から展開する
+  function handlePaste(e) {
+    const input = e.target;
+    if (input.tagName !== "INPUT") return;
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    if (!text.includes("\t") && !/[\r\n]/.test(text.replace(/[\r\n]+$/, ""))) return;  // 1セル分なら通常の貼り付け
+    e.preventDefault();
+
+    const lines = text.replace(/[\r\n]+$/, "").split(/\r?\n/).map(function (l) { return l.split("\t"); });
+    const startTr  = input.closest("tr");
+    const startRow = Array.from(gridBody.rows).indexOf(startTr);
+    const startCol = Array.from(startTr.querySelectorAll("input")).indexOf(input);
+
+    for (let i = 0; i < lines.length; i++) {
+      let tr = gridBody.rows[startRow + i];
+      if (!tr) { tr = addRow(); if (!tr) break; }
+      const inputs = tr.querySelectorAll("input");
+      lines[i].forEach(function (v, j) {
+        const target = inputs[startCol + j];
+        if (target) target.value = v;      // 列からはみ出した分は捨てる
+      });
+    }
+    bulkMessage("", "");
+  }
+
+  // Enter で下のセルへ。最終行なら行を増やす。
+  function handleKeydown(e) {
+    if (e.key !== "Enter" || e.target.tagName !== "INPUT" || e.isComposing) return;
+    e.preventDefault();
+    const tr = e.target.closest("tr");
+    const col = Array.from(tr.querySelectorAll("input")).indexOf(e.target);
+    const next = tr.nextElementSibling || addRow();
+    if (next) next.querySelectorAll("input")[col].focus();
+  }
+
+  // テーブル選択に合わせて入力表を作る
+  async function setupBulk(db, table) {
+    bulkMessage("", "");
+    bulkGrid.innerHTML = "";
+    bulkControls.hidden = true;
+    bulkColumns = [];
+    gridBody = null;
+    if (!db || !table) {
+      bulkHint.textContent = "上でテーブルを選ぶと、ここに入力欄が出ます。";
+      return;
+    }
+    try {
+      const res = await api("/databases/" + encodeURIComponent(db) + "/tables/" + encodeURIComponent(table) + "/columns");
+      bulkColumns = (res.data || []).map(function (c) {
+        return {
+          name: c.COLUMN_NAME,
+          type: c.COLUMN_TYPE || c.DATA_TYPE || "",
+          auto: String(c.EXTRA || "").toLowerCase().includes("auto_increment"),
+          nullable: c.IS_NULLABLE === undefined ? undefined : c.IS_NULLABLE === "YES",
+        };
+      });
+      const canDetect = (res.data || []).every(function (c) { return c.EXTRA !== undefined; });
+      const autoCols  = bulkColumns.filter(function (c) { return c.auto; }).map(function (c) { return c.name; });
+      if (bulkColumns.every(function (c) { return c.auto; })) {
+        bulkHint.textContent = table + " には入力する列がありません(すべて自動採番です)。";
+        return;
+      }
+      let hint = table + " に追加する行を入力してください。Enter で下のセルへ移動し、Excel からコピーした範囲はそのまま貼り付けられます。";
+      if (autoCols.length > 0) {
+        hint += " " + autoCols.join(", ") + " は自動で採番されます。";
+      } else if (!canDetect) {
+        hint += " (自動採番の列を判別できないため、全列を表示しています)";
+      }
+      bulkHint.textContent = hint;
+      buildGrid();
+      bulkControls.hidden = false;
+    } catch (e) {
+      bulkHint.textContent = "列情報を取得できませんでした: " + e.message;
+    }
+  }
+
+  bulkGrid.addEventListener("paste", handlePaste);
+  bulkGrid.addEventListener("keydown", handleKeydown);
+  addRowBtn.addEventListener("click", function () {
+    const tr = addRow();
+    if (tr) tr.querySelector("input").focus();
+  });
+  clearBtn.addEventListener("click", function () {
+    if (collectRows().length > 0 && !confirm("入力内容をすべて消しますか？")) return;
+    buildGrid();
+    bulkMessage("", "");
+  });
+  bulkInsertBtn.addEventListener("click", insertBulk);
+
   showBtn.addEventListener("click", showTable);
 
   dbSelect.addEventListener("change", function () {
     loadTables(dbSelect.value);
+    setupBulk("", "");               // DBが変わったら一括挿入欄もリセット
   });
 
   tableSelect.addEventListener("change", function () {
     // テーブルが選ばれたら「表示」を押せるようにする(未選択なら押せない)
     showBtn.disabled = !tableSelect.value;
+    setupBulk(dbSelect.value, tableSelect.value);
   });
 
   sqlToggle.addEventListener("change", function () {

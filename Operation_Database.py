@@ -2,7 +2,7 @@ import mysql.connector as sqlconn
 from mysql.connector import Error
 import pandas as pd
 import re
-from WHERE_node import Node
+from WHERE_node import build_select_columns    # 集約を含む取得列の検証・組み立て(検証層に一元化)
 
 
 class DB_Manager:                                   # データベースの基本操作を行うクラス
@@ -415,11 +415,17 @@ class DB_Manager:                                   # データベースの基�
         if self.table_name is None:
             return self._fail("table not selected")
 
+        # 取得列を組み立てる(集約を含む)。検証は WHERE_node に一元化。
+        # リストで来たら self.columns と照合して検証。文字列は後方互換でそのまま。
+        columns_sql, err = build_select_columns(Columns, self.columns or [])
+        if err:
+            return self._fail(err)
+
         tail, params, err = self._build_tail(query_option)
         if err:
             return self._fail(err)
 
-        query = f"SELECT {Columns} FROM {self.table_name}{tail}"
+        query = f"SELECT {columns_sql} FROM {self.table_name}{tail}"
         return self._execute(query, tuple(params) if params else None, fetch=True)
 
     # JOIN版 query_option(上の各キーに from / joins を追加。列はすべて修飾必須):
@@ -531,7 +537,7 @@ class DB_Manager:                                   # データベースの基�
             return self._fail("please specify condition")
 
         where_params = tuple(where[1]) if where[1] else None
-        pk = self.primary_keys[0] if self.primary_keys else None   # 単一PK前提の簡易版
+        pks = list(self.primary_keys) if self.primary_keys else []  # 複合主キーにも対応
 
         before = self._execute(f"SELECT * FROM {self.table_name} WHERE {where[0]}",
                                where_params, fetch=True)            # 更新前
@@ -546,10 +552,15 @@ class DB_Manager:                                   # データベースの基�
             return res
 
         after = before["data"]
-        if pk and before["data"]:                   # 条件列が変わっても拾えるようPKで取り直す
-            ids = [row[pk] for row in before["data"]]
-            ph  = ", ".join(["%s"] * len(ids))
-            a = self._execute(f"SELECT * FROM {self.table_name} WHERE {pk} IN ({ph})",
+        if pks and before["data"]:                  # 条件列が変わっても拾えるようPKで取り直す
+            # 複合主キーでも1行ずつ特定できるよう、主キー全列の組で照合する:
+            #   WHERE (series_id, volume_number) IN ((%s, %s), (%s, %s), ...)
+            # ※ SET で主キー自体を変えた場合は拾えない(build_update は主キーの書き換えを禁止している)
+            cols_sql = ", ".join(pks)
+            row_ph   = "(" + ", ".join(["%s"] * len(pks)) + ")"
+            ph       = ", ".join([row_ph] * len(before["data"]))
+            ids      = [row[k] for row in before["data"] for k in pks]
+            a = self._execute(f"SELECT * FROM {self.table_name} WHERE ({cols_sql}) IN ({ph})",
                              tuple(ids), fetch=True)                # 更新後
             if a["success"]:
                 after = a["data"]

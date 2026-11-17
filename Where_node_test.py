@@ -113,5 +113,44 @@ expect_err("where の未知列は query_option でも拒否",
 expect_err("request が dict でない",
            build_query_option(["not", "a", "dict"], COLS))
 
+print("\n===== build_having: 集約左辺 =====")
+from WHERE_node import build_having
+expect("COUNT(*) >= 10",
+       build_having({"agg": {"func": "COUNT", "column": "*"}, "op": ">=", "val": 10}, COLS),
+       ("COUNT(*) >= %s", [10], None))
+expect("SUM(age) > 100(列は実列)",
+       build_having({"agg": {"func": "SUM", "column": "age"}, "op": ">", "val": 100}, COLS),
+       ("SUM(age) > %s", [100], None))
+expect("列左辺も可(GROUP BY 列)",
+       build_having({"col": "status", "op": "=", "val": "active"}, COLS),
+       ("status = %s", ["active"], None))
+expect("複合 AND",
+       build_having({"and": [
+           {"agg": {"func": "COUNT", "column": "*"}, "op": ">=", "val": 5},
+           {"agg": {"func": "AVG", "column": "age"}, "op": "<", "val": 40}]}, COLS),
+       ("(COUNT(*) >= %s AND AVG(age) < %s)", [5, 40], None))
+expect("spec=None は HAVINGなし", build_having(None, COLS), ("", [], None))
+
+print("\n===== build_having: 異常系 =====")
+expect_err("許可外の集約関数",
+           build_having({"agg": {"func": "MEDIAN", "column": "age"}, "op": ">", "val": 1}, COLS))
+expect_err("集約の対象列が未知",
+           build_having({"agg": {"func": "SUM", "column": "salary"}, "op": ">", "val": 1}, COLS))
+expect_err("SUM(*) は不可",
+           build_having({"agg": {"func": "SUM", "column": "*"}, "op": ">", "val": 1}, COLS))
+expect_err("col と agg の併記は不可",
+           build_having({"col": "age", "agg": {"func": "COUNT", "column": "*"}, "op": ">", "val": 1}, COLS))
+expect_err("WHERE(build_where)では agg 左辺は使えない",
+           build_where({"agg": {"func": "COUNT", "column": "*"}, "op": ">", "val": 1}, COLS))
+
+print("\n===== build_query_option: having 経由 =====")
+expect("having が qo に入る",
+       build_query_option({"group_by": ["status"],
+                           "having": {"agg": {"func": "COUNT", "column": "*"}, "op": ">=", "val": 3}},
+                          COLS)["query_option"]["having"],
+       ("COUNT(*) >= %s", [3]))
+expect_err("having の未知列は拒否",
+           build_query_option({"having": {"agg": {"func": "SUM", "column": "salary"}, "op": ">", "val": 1}}, COLS))
+
 print(f"\nRESULT: {_passed} passed, {_failed} failed")
 sys.exit(0 if _failed == 0 else 1)
